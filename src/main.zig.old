@@ -1,0 +1,279 @@
+const std = @import("std");
+
+const Vec = @Vector(3, f32);
+const Vec2 = @Vector(2, f32);
+const Triangle = [3]u8;
+
+// cube stuff
+const cube_vertices = [_]Vec{
+    .{ 1.0, 1.0, -1.0 },
+    .{ 1.0, 1.0, 1.0 },
+    .{ 1.0, -1.0, 1.0 },
+    .{ 1.0, -1.0, -1.0 },
+    .{ -1.0, 1.0, -1.0 },
+    .{ -1.0, 1.0, 1.0 },
+    .{ -1.0, -1.0, 1.0 },
+    .{ -1.0, -1.0, -1.0 },
+};
+
+const cube_meshes = [_]Triangle{
+    .{ 0, 1, 2 }, // and then to get normal you do (0,1) x (0,2)
+    .{ 2, 3, 0 },
+
+    .{ 0, 4, 5 },
+    .{ 5, 1, 0 },
+
+    .{ 7, 6, 5 },
+    .{ 5, 4, 7 },
+
+    .{ 3, 2, 6 },
+    .{ 6, 7, 3 },
+
+    .{ 1, 5, 6 },
+    .{ 6, 2, 1 },
+
+    .{ 0, 3, 7 },
+    .{ 7, 4, 0 },
+};
+
+const symbols: [12]u8 = .{ '*', '*', '$', '$', '#', '#', '@', '@', '+', '+', '=', '=' };
+
+fn drawCube(rotationX: f32, rotationY: f32, rotationZ: f32) void {
+    for (cube_meshes, 0..) |triangle, m| { // go through each triangle
+        var rotated_vertices: [3]Vec = undefined;
+        var projected_vertices: [3]Vec2 = undefined;
+        //std.debug.print("----------------------- MESH --------------------- \n", .{});
+        for (triangle, 0..) |v_index, i| { // go through each vertex of the triangle
+
+            var v = cube_vertices[v_index]; // scale
+            // rotate
+            v = rotateAroundX(v, rotationX);
+            v = rotateAroundY(v, rotationY);
+            v = rotateAroundZ(v, rotationZ);
+            // std.debug.print("rotated: {d:3.3}\n", .{v});
+            v *= Vec{ 80, 80, 80 }; // scale
+            // std.debug.print("scaled: {d:3.3}\n", .{v});
+            v += Vec{ 0, 0, 200 }; // push it inside
+            // std.debug.print("pushed: {d:3.3}\n", .{v});
+            rotated_vertices[i] = v;
+            projected_vertices[i] = project(v) + Vec2{ NB_COLS / 2, NB_ROWS / 2 };
+            // std.debug.print("projected: {d:3.3}\n", .{projected_vertices[i]});
+        }
+        const AB = rotated_vertices[1] - rotated_vertices[0];
+        const AC = rotated_vertices[2] - rotated_vertices[0];
+        const normal = Vec{ AB[1] * AC[2] - AB[2] * AC[1], AB[2] * AC[0] - AB[0] * AC[2], AB[0] * AC[1] - AB[1] * AC[0] };
+        const camera_ray = Vec{ 0, 0, 1 };
+        const dot_vec = @reduce(.Add, camera_ray * normal);
+        std.debug.print("dot product: {any}\n", .{dot_vec});
+        if (dot_vec > 0) {
+            drawTriangle(projected_vertices[0], projected_vertices[1], projected_vertices[2], symbols[m]);
+            //        drawTriangle(projected_vertices[0], projected_vertices[1], projected_vertices[2], symbols[m])
+        }
+        // drawVetex(projected_vertices[0], symbols[m]);
+        // drawVetex(projected_vertices[1], symbols[m]);
+        // drawVetex(projected_vertices[2], symbols[m]);
+        //_ = m;
+    }
+}
+
+fn drawVetex(v: Vec2, symbol: u8) void {
+    const x: usize = @intFromFloat(@trunc(v[0]));
+    const y: usize = @intFromFloat(@trunc(v[1]));
+    screen[y][x] = symbol;
+}
+
+fn drawCube2(rotationX: f32, rotationY: f32, rotationZ: f32) void {
+    for (cube_meshes, 0..) |triangle, m| {
+        var rotated_vertices: [3]Vec = undefined;
+        var projected_vertices: [3]Vec2 = undefined;
+        for (triangle, 0..) |v_index, i| {
+            var v = cube_vertices[v_index] * Vec{ 10, 10, 10 }; // scale
+            // rotate
+            v = rotateAroundX(v, rotationX);
+            v = rotateAroundY(v, rotationY);
+            v = rotateAroundZ(v, rotationZ);
+            // then move it
+            v += Vec{ NB_COLS / 2, NB_ROWS / 2, 200 };
+            rotated_vertices[i] = v;
+            std.debug.print("rotated: {any}\n", .{v});
+            projected_vertices[i] = project(v);
+            std.debug.print("projected: {any}\n", .{projected_vertices});
+            _ = m;
+        }
+        // const AB = rotated_vertices[1] - rotated_vertices[0];
+        // const AC = rotated_vertices[2] - rotated_vertices[0];
+        // const normal = Vec{ AB[1] * AC[2] - AB[2] * AC[1], AB[2] * AC[0] - AB[0] * AC[2], AB[0] * AC[1] - AB[1] * AC[0] };
+        // const camera_ray = Vec{ 0, 0, 1 };
+        // const dot_vec = @reduce(.Add, camera_ray * normal);
+        // std.debug.print("dot product: {any}\n", .{dot_vec});
+        // if (dot_vec > 0) {
+        //drawTriangle(projected_vertices[0], projected_vertices[1], projected_vertices[2], symbols[m]);
+        // }
+    }
+}
+fn project(vec: Vec) Vec2 {
+    return .{ vec[0] / vec[2], vec[1] / vec[2] };
+}
+
+fn rotateAroundZ(vec: Vec, angle: f32) Vec {
+    const rotationMatrixRow1: Vec = .{ @cos(angle), -@sin(angle), 0 };
+    const rotationMatrixRow2: Vec = .{ @sin(angle), @cos(angle), 0 };
+
+    return .{
+        @reduce(.Add, vec * rotationMatrixRow1),
+        @reduce(.Add, vec * rotationMatrixRow2),
+        vec[2],
+    };
+}
+
+fn rotateAroundY(vec: Vec, angle: f32) Vec {
+    const rotationMatrixRow1: Vec = .{ @cos(angle), 0, @sin(angle) };
+    const rotationMatrixRow3: Vec = .{ -@sin(angle), 0, @cos(angle) };
+
+    return .{
+        @reduce(.Add, vec * rotationMatrixRow1),
+        vec[1],
+        @reduce(.Add, vec * rotationMatrixRow3),
+    };
+}
+fn rotateAroundX(vec: Vec, angle: f32) Vec {
+    const rotationMatrixRow2: Vec = .{ 0, @cos(angle), -@sin(angle) };
+    const rotationMatrixRow3: Vec = .{ 0, @sin(angle), @cos(angle) };
+
+    return .{
+        vec[0],
+        @reduce(.Add, vec * rotationMatrixRow2),
+        @reduce(.Add, vec * rotationMatrixRow3),
+    };
+}
+
+fn drawTriangle(a: Vec2, b: Vec2, c: Vec2, symbol: u8) void {
+    // 1 sort vertices
+    var v0 = a;
+    var v1 = b;
+    var v2 = c;
+    if (v0[1] > v1[1]) {
+        v0 = b;
+        v1 = a;
+    }
+    if (v1[1] > v2[1]) {
+        const tmp = v2;
+        v2 = v1;
+        v1 = tmp;
+    }
+    if (v0[1] > v1[1]) {
+        const tmp = v0;
+        v0 = v1;
+        v1 = tmp;
+    }
+    // find mid point
+    var midpoint: Vec2 = .{ 0, v1[1] };
+    midpoint[0] = (v1[1] - v0[1]) * (v2[0] - v0[0]) / (v2[1] - v0[1]) + v0[0];
+    var right: Vec2 = undefined;
+    var left: Vec2 = undefined;
+    if (midpoint[0] < v1[0]) {
+        left = midpoint;
+        right = v1;
+    } else {
+        left = v1;
+        right = midpoint;
+    }
+    // draw top
+    drawFlatBottom(v0, left, right, symbol);
+    // draw bottom
+    drawFlatTop(left, right, v2, symbol);
+}
+
+fn drawFlatTop(tl: Vec2, tr: Vec2, bottom: Vec2, symbol: u8) void {
+    const start_y: usize = @intFromFloat(@trunc(tl[1]));
+    const stop_y: usize = @intFromFloat(@trunc(bottom[1]));
+
+    var l_f = tl[0];
+    const l_dx = bottom[0] - tl[0];
+    const l_dy = bottom[1] - tl[1];
+    const l_inc = l_dx / l_dy;
+
+    var r_f = tr[0];
+    const r_dx = tr[0] - bottom[0];
+    const r_dy = bottom[1] - tr[1];
+    const r_dec = r_dx / r_dy;
+
+    for (start_y..stop_y + 1) |y| {
+        const l: usize = @intFromFloat(@trunc(l_f));
+        const r: usize = @intFromFloat(@trunc(r_f));
+        for (l..r + 1) |x| {
+            screen[y][x] = symbol;
+        }
+        l_f += l_inc;
+        r_f -= r_dec;
+        if (l_f > r_f) break;
+    }
+}
+fn drawFlatBottom(top: Vec2, bl: Vec2, br: Vec2, symbol: u8) void {
+    std.debug.print("start_y: {d:3.3}, stop_y: {d:3.3}\n", .{ top[1], bl[1] });
+    const start_y: usize = @intFromFloat(@trunc(top[1]));
+    const stop_y: usize = @intFromFloat(@trunc(bl[1]));
+
+    var l_f = top[0];
+    const l_dx = top[0] - bl[0];
+    const l_dy = bl[1] - top[1];
+    const l_inc = l_dx / l_dy;
+
+    var r_f = top[0];
+    const r_dx = br[0] - top[0];
+    const r_dy = br[1] - top[1];
+    const r_dec = r_dx / r_dy;
+
+    for (start_y..stop_y + 1) |y| {
+        const l: usize = @intFromFloat(@trunc(l_f));
+        const r: usize = @intFromFloat(@trunc(r_f));
+        for (l..r + 1) |x| {
+            screen[y][x] = symbol;
+        }
+        l_f -= l_inc;
+        r_f += r_dec;
+        if (l_f > r_f) break;
+    }
+}
+
+const NB_COLS = 206;
+const NB_ROWS = 48;
+
+var screen: [NB_ROWS][NB_COLS]u8 = .{.{' '} ** NB_COLS} ** NB_ROWS;
+const cleared_screen: [NB_ROWS][NB_COLS]u8 = .{.{' '} ** NB_COLS} ** NB_ROWS;
+var buffer: [3 + NB_ROWS * (NB_COLS + 1)]u8 = undefined;
+
+pub fn main() !void {
+    //screen[NB_ROWS / 2][NB_COLS / 2] = '*';
+
+    // drawFlatBottom(.{ 50, 4 }, .{ 10, 20 }, .{ 100, 20 }, '*');
+    // drawFlatTop(.{ 10, 10 }, .{ 100, 10 }, .{ 50, 40 }, '#');
+    //drawTriangle(.{ 10, 24 }, .{ 50, 2 }, .{ 140, 38 }, '$');
+    //return;
+    const stdout = std.io.getStdOut().writer();
+    // Clear screen and hide cursor at the start
+    try stdout.writeAll("\x1B[2J\x1B[H\x1B[?25l");
+    defer stdout.writeAll("\x1B[?25h") catch {}; // Show cursor when done
+
+    // Set the cursor positioning sequence at the start of the buffer
+    buffer[0] = '\x1B';
+    buffer[1] = '[';
+    buffer[2] = 'H';
+    var rx: f32 = 0.0;
+    var rz: f32 = 0.0;
+    var ry: f32 = 0.0;
+    while (true) {
+        screen = cleared_screen;
+        drawCube(rx, ry, rz);
+        for (0..NB_ROWS) |i| {
+            const offset = 3 + i * (NB_COLS + 1);
+            @memcpy(buffer[offset .. offset + NB_COLS], &screen[i]);
+            buffer[offset + NB_COLS] = '\n';
+        }
+        try stdout.writeAll(&buffer);
+        std.time.sleep(100_000_000);
+        rx = 0; //@mod((rx + 0.1), (2 * std.math.pi));
+        ry = 0; //@mod((ry + 0.1), (2 * std.math.pi));
+        rz = @mod((rz + 0.1), (2 * std.math.pi));
+    }
+}
