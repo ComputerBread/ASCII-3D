@@ -280,7 +280,32 @@ fn drawLine(x0: f32, y0: f32, x1: f32, y1: f32, symbol: u8) void {
     }
 }
 
+// ----------------------------------------------------------------------------
+// ---- questionable time stuff -----------------------------------------------
+// ----------------------------------------------------------------------------
+var target_delta_time_ns: i128 = 33_333_333;
+var prev_time_ns: i128 = undefined;
+
+fn setTargetFPS(fps: i128) void {
+    prev_time_ns = std.time.nanoTimestamp();
+    target_delta_time_ns = @divTrunc(@as(i128, 1e9), fps); // 1e9/fps;
+}
+
+fn getDeltaTime() f32 {
+    const now = std.time.nanoTimestamp();
+    const delta_t_ns = now - prev_time_ns;
+    prev_time_ns = now;
+    const sleep_time = target_delta_time_ns - delta_t_ns;
+    if (sleep_time > 0) {
+        std.time.sleep(@intCast(sleep_time));
+    } else {
+        return @as(f32, @floatFromInt(delta_t_ns)) * @as(f32, 1e-9);
+    }
+    return @as(f32, @floatFromInt(target_delta_time_ns)) * @as(f32, 1e-9);
+}
+
 pub fn main() !void {
+    setTargetFPS(240);
     const stdout = std.io.getStdOut().writer();
     // Clear screen and hide cursor at the start
     try stdout.writeAll("\x1B[2J\x1B[H\x1B[?25l");
@@ -294,6 +319,7 @@ pub fn main() !void {
     var ry: f32 = 0;
     var rz: f32 = 0;
     while (true) {
+        const delta_time = getDeltaTime();
         clear_screen();
         drawCube(rx, ry, rz);
         // drawTriangle(.{ .x = 2, .y = 30 }, .{ .x = 10, .y = 5 }, .{ .x = 20, .y = 30 }, 'o');
@@ -305,9 +331,9 @@ pub fn main() !void {
         // drawTriangle(.{ .x = 125, .y = 20 }, .{ .x = 140, .y = 5 }, .{ .x = 140, .y = 40 }, 'o');
         // drawTriangle(.{ .x = 145, .y = 5 }, .{ .x = 145, .y = 40 }, .{ .x = 160, .y = 20 }, 'o');
         try display_screen(stdout);
-        std.time.sleep(100_000_000);
-        rx = @mod((rx + 0.1), (2 * std.math.pi));
-        ry = @mod((ry + 0.1), (2 * std.math.pi));
-        rz = @mod((rz + 0.1), (2 * std.math.pi));
+        rx = @mod((rx + 0.8 * delta_time), (2 * std.math.pi));
+        ry = @mod((ry + 0.8 * delta_time), (2 * std.math.pi));
+        rz = @mod((rz + 0.8 * delta_time), (2 * std.math.pi));
+        std.debug.print("delta_time: {d:1.9}", .{delta_time});
     }
 }
