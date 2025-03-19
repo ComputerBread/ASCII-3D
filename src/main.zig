@@ -39,7 +39,7 @@ const cube_faces: [12][3]u8 = .{
     .{ 1, 4, 2 },
 };
 
-const symbols = "**$$++##@@==";
+const symbols = "$$**++##@@==";
 fn drawCube(rx: f32, ry: f32, rz: f32) void {
     const camera_v = Vec3{ .x = 0, .y = 0, .z = -1 };
     for (cube_faces, 0..) |face, m| {
@@ -130,14 +130,14 @@ fn dot_product(a: Vec3, b: Vec3) f32 {
 }
 
 const Vec2 = struct {
-    x: f32,
-    y: f32,
+    x: usize,
+    y: usize,
 };
 
 fn project(v: Vec3) Vec2 {
     return Vec2{
-        .x = v.x / v.z + NB_COLS / 2,
-        .y = v.y / v.z + NB_ROWS / 2,
+        .x = @intFromFloat(@round(v.x / v.z + NB_COLS / 2)),
+        .y = @intFromFloat(@round(v.y / v.z + NB_ROWS / 2)),
     };
 }
 
@@ -163,18 +163,25 @@ fn drawTriangle(vec0: Vec2, vec1: Vec2, vec2: Vec2, symbol: u8) void {
         v1 = tmp;
     }
 
-    if (v2.y - v1.y < 0.01) {
+    if (v2.y == v1.y) {
         drawFlatBottom(v0, v1, v2, symbol);
         return;
     }
-    if (v1.y - v0.y < 0.01) {
+    if (v1.y == v0.y) {
         drawFlatTop(v0, v1, v2, symbol);
         return;
     }
 
+    // brother, working with usize is annoying af
+    const v0x: i64 = @intCast(v0.x);
+    const v0y: i64 = @intCast(v0.y);
+    const v1y: i64 = @intCast(v1.y);
+    const v2x: i64 = @intCast(v2.x);
+    const v2y: i64 = @intCast(v2.y);
+    const midpoint_x = v0x + @divFloor((v2x - v0x) * (v1y - v0y), (v2y - v0y));
     // find midpoint
     const midpoint = Vec2{
-        .x = (v2.x - v0.x) * (v1.y - v0.y) / (v2.y - v0.y) + v0.x,
+        .x = @intCast(midpoint_x), // maybe a problem here?
         .y = v1.y,
     };
 
@@ -183,41 +190,66 @@ fn drawTriangle(vec0: Vec2, vec1: Vec2, vec2: Vec2, symbol: u8) void {
 }
 
 fn drawFlatTop(t1: Vec2, t2: Vec2, b: Vec2, symbol: u8) void {
+    // alright this is annoying
+    const bx_f: f32 = @floatFromInt(b.x);
+    const by_f: f32 = @floatFromInt(b.y);
+    const t1x_f: f32 = @floatFromInt(t1.x);
+    const t1y_f: f32 = @floatFromInt(t1.y);
+    const t2x_f: f32 = @floatFromInt(t2.x);
+    const t2y_f: f32 = @floatFromInt(t2.y);
+
     // x_inc will have opposite signs, t1, t2 don't need to be ordered properly!!!
-    const x_inc_1 = (b.x - t1.x) / (b.y - t1.y);
-    const x_inc_2 = (b.x - t2.x) / (b.y - t2.y);
+    const x_inc_1: f32 = (bx_f - t1x_f) / (by_f - t1y_f);
+    const x_inc_2: f32 = (bx_f - t2x_f) / (by_f - t2y_f);
 
-    if (t1.y < 0 or t1.y > NB_ROWS or b.y < 0 or b.y > NB_ROWS) return;
-    const y_start: usize = @intFromFloat(@round(t1.y));
-    const y_stop: usize = @as(usize, @intFromFloat(@round(b.y))) + 1;
+    // if (t1.y < 0 or t1.y > NB_ROWS or b.y < 0 or b.y > NB_ROWS) return;
+    const y_start: usize = t1.y;
+    const y_stop: usize = b.y + 1;
 
-    var x_start = t1.x;
-    var x_stop = t2.x;
+    var x_start: f32 = t1x_f;
+    var x_stop: f32 = t2x_f;
 
     for (y_start..y_stop) |y| {
-        const y_float: f32 = @floatFromInt(y);
-        drawLine(x_start, y_float, x_stop, y_float, symbol);
+        drawScanLine(y, @intFromFloat(@round(x_start)), @intFromFloat(@round(x_stop)), symbol);
         x_start += x_inc_1;
         x_stop += x_inc_2;
     }
 }
 
 fn drawFlatBottom(t: Vec2, b1: Vec2, b2: Vec2, symbol: u8) void {
-    const x_dec_1 = (t.x - b1.x) / (b1.y - t.y);
-    const x_dec_2 = (t.x - b2.x) / (b2.y - t.y);
+    const tx_f: f32 = @floatFromInt(t.x);
+    const ty_f: f32 = @floatFromInt(t.y);
+    const b1x_f: f32 = @floatFromInt(b1.x);
+    const b1y_f: f32 = @floatFromInt(b1.y);
+    const b2x_f: f32 = @floatFromInt(b2.x);
+    const b2y_f: f32 = @floatFromInt(b2.y);
 
-    if (t.y < 0 or t.y > NB_ROWS or b1.y < 0 or b1.y > NB_ROWS) return;
-    const y_start: usize = @intFromFloat(@round(t.y));
-    const y_stop: usize = @as(usize, @intFromFloat(@round(b1.y))) + 1;
+    const x_dec_1: f32 = (tx_f - b1x_f) / (b1y_f - ty_f);
+    const x_dec_2: f32 = (tx_f - b2x_f) / (b2y_f - ty_f);
 
-    var x_start = t.x;
-    var x_stop = t.x;
+    const y_start: usize = t.y;
+    const y_stop: usize = b1.y + 1;
+
+    var x_start: f32 = tx_f;
+    var x_stop: f32 = tx_f;
 
     for (y_start..y_stop) |y| {
-        const y_float: f32 = @floatFromInt(y);
-        drawLine(x_start, y_float, x_stop, y_float, symbol);
+        drawScanLine(y, @intFromFloat(@round(x_start)), @intFromFloat(@round(x_stop)), symbol);
         x_start -= x_dec_1;
         x_stop -= x_dec_2;
+    }
+}
+
+fn drawScanLine(y: usize, x0: usize, x1: usize, symbol: u8) void {
+    var left = x0;
+    var right = x1;
+    if (x0 > x1) {
+        left = x1;
+        right = x0;
+    }
+
+    for (left..right + 1) |x| {
+        screen[y][x] = symbol;
     }
 }
 
@@ -264,6 +296,14 @@ pub fn main() !void {
     while (true) {
         clear_screen();
         drawCube(rx, ry, rz);
+        // drawTriangle(.{ .x = 2, .y = 30 }, .{ .x = 10, .y = 5 }, .{ .x = 20, .y = 30 }, 'o');
+        // drawTriangle(.{ .x = 22, .y = 20 }, .{ .x = 30, .y = 5 }, .{ .x = 38, .y = 40 }, 'o');
+        // drawTriangle(.{ .x = 40, .y = 40 }, .{ .x = 50, .y = 5 }, .{ .x = 65, .y = 30 }, 'a');
+        // drawTriangle(.{ .x = 70, .y = 5 }, .{ .x = 70, .y = 30 }, .{ .x = 80, .y = 30 }, 'o');
+        // drawTriangle(.{ .x = 82, .y = 30 }, .{ .x = 95, .y = 30 }, .{ .x = 95, .y = 5 }, 'o');
+        // drawTriangle(.{ .x = 100, .y = 5 }, .{ .x = 110, .y = 30 }, .{ .x = 120, .y = 5 }, 'o');
+        // drawTriangle(.{ .x = 125, .y = 20 }, .{ .x = 140, .y = 5 }, .{ .x = 140, .y = 40 }, 'o');
+        // drawTriangle(.{ .x = 145, .y = 5 }, .{ .x = 145, .y = 40 }, .{ .x = 160, .y = 20 }, 'o');
         try display_screen(stdout);
         std.time.sleep(100_000_000);
         rx = @mod((rx + 0.1), (2 * std.math.pi));
